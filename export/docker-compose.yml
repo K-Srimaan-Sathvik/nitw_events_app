@@ -1,0 +1,66 @@
+version: '3.9'
+services:
+  db:
+    image: postgres:15
+    container_name: nitw_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-nitw}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nitw}
+      POSTGRES_DB: ${DB_NAME:-nitw_clubmgmt}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nitw}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nitw_backend
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      PORT: ${BACKEND_PORT:-4000}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-nitw_clubmgmt}
+      DB_USER: ${DB_USER:-nitw}
+      DB_PASSWORD: ${DB_PASSWORD:-nitw}
+      JWT_SECRET: ${JWT_SECRET:-change_me_super_secret}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      NODE_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nitw_frontend
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      VITE_API_URL: http://localhost:${BACKEND_PORT:-4000}
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+volumes:
+  db_data:
